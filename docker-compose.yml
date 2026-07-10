@@ -1,0 +1,56 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: bp-tracker-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-bpuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-bp_tracker}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bpuser} -d ${POSTGRES_DB:-bp_tracker}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: ./backend
+    container_name: bp-tracker-api
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-bpuser}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-bp_tracker}
+      TZ: ${TZ:-Asia/Kolkata}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:you@example.com}
+      NTFY_TOPIC: ${NTFY_TOPIC:-}
+      NTFY_SERVER: ${NTFY_SERVER:-https://ntfy.sh}
+      BP_MORNING_TIME: ${BP_MORNING_TIME:-08:00}
+      BP_AFTERNOON_TIME: ${BP_AFTERNOON_TIME:-14:00}
+      BP_EVENING_TIME: ${BP_EVENING_TIME:-20:00}
+      WALKING_REMINDER_TIME: ${WALKING_REMINDER_TIME:-18:00}
+      MIN_DAILY_STEPS: ${MIN_DAILY_STEPS:-5000}
+    volumes:
+      - api_data:/app/data
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api}
+        VITE_VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+    container_name: bp-tracker-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-3005}:80"
+
+volumes:
+  postgres_data:
+  api_data:
